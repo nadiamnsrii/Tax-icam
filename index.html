@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#E8660A"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Tax'icam"/>
+<meta name="description" content="Covoiturage sécurisé pour les étudiants ICAM de Vannes"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icons/icon-192.png"/>
+<link rel="icon" type="image/png" href="icons/icon-192.png"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<title>Tax'icam</title>
+<style>
+/* ===== RESET & BASE ===== */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --orange:#E8660A;--orange-light:#FFF3EC;--orange-mid:#FEE8D6;--orange-dark:#C4530A;
+  --purple:#7F77DD;--purple-light:#EEEDFE;
+  --pink:#D4537E;--pink-light:#FBEAF0;
+  --blue:#378ADD;--blue-light:#E6F1FB;
+  --green:#1D9E75;--green-light:#E1F5EE;
+  --text:#1a1a18;--text2:#6b6b66;--text3:#9a9a95;
+  --bg:#ffffff;--bg2:#f7f5f0;--bg3:#f0ede8;
+  --border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.06);
+  --radius:12px;--radius-sm:8px;--radius-lg:20px;
+  --safe-top:env(safe-area-inset-top);--safe-bot:env(safe-area-inset-bottom);
+  --font:'DM Sans',system-ui,sans-serif;
+}
+@media(prefers-color-scheme:dark){:root{
+  --text:#f0ede8;--text2:#a8a5a0;--text3:#6b6b66;
+  --bg:#1a1918;--bg2:#242320;--bg3:#2e2c2a;
+  --border:rgba(255,255,255,0.1);--border2:rgba(255,255,255,0.06);
+}}
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--text);font-size:15px}
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+
+/* ===== APP SHELL ===== */
+#app{height:100%;display:flex;flex-direction:column;max-width:430px;margin:0 auto;position:relative;overflow:hidden}
+.screen{display:none;flex-direction:column;flex:1;overflow:hidden}
+.screen.active{display:flex}
+
+/* ===== TOPBAR ===== */
+.topbar{
+  padding:calc(12px + var(--safe-top)) 16px 12px;
+  background:var(--orange);
+  display:flex;align-items:center;gap:10px;
+  flex-shrink:0;
+}
+.topbar-logo{width:30px;height:30px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.topbar-title{font-size:18px;font-weight:600;color:#fff;flex:1}
+.topbar-back{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1;margin-right:2px}
+.topbar-action{background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer}
+
+/* ===== BOTTOM NAV ===== */
+.nav{
+  display:flex;border-top:0.5px solid var(--border);background:var(--bg);
+  padding-bottom:var(--safe-bot);flex-shrink:0;
+}
+.nav-btn{flex:1;padding:10px 0 8px;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--text3);transition:color .15s}
+.nav-btn.active{color:var(--orange)}
+.nav-btn svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+
+/* ===== TABS ===== */
+.tabs{display:flex;border-bottom:0.5px solid var(--border2);background:var(--bg);flex-shrink:0;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;padding:11px 16px;font-size:13px;color:var(--text2);background:none;border:none;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:all .15s}
+.tab.active{color:var(--orange);font-weight:500;border-bottom-color:var(--orange)}
+
+/* ===== CARDS ===== */
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 14px}
+.scroll::-webkit-scrollbar{display:none}
+.card{background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius);padding:13px 14px;margin-bottom:10px;cursor:pointer;transition:transform .1s,border-color .15s;-webkit-user-select:none;user-select:none}
+.card:active{transform:scale(0.98)}
+.card.sam{border-left:3px solid var(--orange)}
+.card.event{border-left:3px solid var(--purple)}
+.card.daily{border-left:3px solid var(--blue)}
+.card.request{border-left:3px solid var(--pink)}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.card-route{font-size:14px;font-weight:500;color:var(--text)}
+.card-time{font-size:12px;color:var(--text2)}
+.card-badges{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.badge{font-size:11px;padding:3px 8px;border-radius:20px;font-weight:500}
+.badge.sam{background:var(--orange-mid);color:#7A3A00}
+.badge.event{background:var(--purple-light);color:#3C3489}
+.badge.daily{background:var(--blue-light);color:#0C447C}
+.badge.request{background:var(--pink-light);color:#4B1528}
+.badge.zero{background:var(--orange-mid);color:#7A3A00}
+.badge.neutral{background:var(--bg3);color:var(--text2)}
+.avatar{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0}
+.av-row{display:flex;align-items:center;gap:7px}
+.av-name{font-size:12px;color:var(--text2)}
+
+/* ===== MAP ===== */
+#map{height:200px;flex-shrink:0;z-index:1}
+.leaflet-container{font-family:var(--font)!important}
+
+/* ===== FORM ===== */
+.form-wrap{flex:1;overflow-y:auto;padding:16px 14px;-webkit-overflow-scrolling:touch}
+.form-section{margin-bottom:16px}
+.form-label{font-size:12px;color:var(--text2);display:block;margin-bottom:5px;font-weight:500}
+.input{width:100%;height:42px;padding:0 13px;border:0.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;background:var(--bg);color:var(--text);font-family:var(--font);appearance:none;-webkit-appearance:none;transition:border-color .15s}
+.input:focus{outline:none;border-color:var(--orange)}
+.input.area{height:auto;padding:12px 13px;resize:none}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.type-btn{padding:12px 8px;border:0.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);cursor:pointer;text-align:center;font-size:12px;color:var(--text2);font-family:var(--font);transition:all .15s}
+.type-btn.sel{border-color:var(--orange);background:var(--orange-light);color:var(--orange-dark);font-weight:500}
+.type-icon{font-size:20px;display:block;margin-bottom:4px}
+.ac-list{border:0.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);margin-top:3px;display:none;box-shadow:0 4px 16px rgba(0,0,0,0.1);max-height:160px;overflow-y:auto}
+.ac-item{padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:0.5px solid var(--border2)}
+.ac-item:last-child{border-bottom:none}
+.ac-item:active{background:var(--bg2)}
+.ac-name{font-weight:500;color:var(--text)}
+.ac-addr{font-size:11px;color:var(--text2);margin-top:1px}
+.btn-primary{width:100%;padding:14px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius-sm);font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);transition:background .15s}
+.btn-primary:active{background:var(--orange-dark)}
+.btn-secondary{width:100%;padding:12px;background:var(--bg2);color:var(--text);border:0.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-weight:500;cursor:pointer;font-family:var(--font)}
+
+/* ===== AUTH SCREEN ===== */
+.auth-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;background:var(--bg)}
+.auth-logo{width:72px;height:72px;background:var(--orange);border-radius:24px;display:flex;align-items:center;justify-content:center;margin-bottom:24px}
+.auth-logo svg{width:38px;height:38px}
+.auth-title{font-size:26px;font-weight:600;color:var(--text);margin-bottom:6px;text-align:center}
+.auth-sub{font-size:14px;color:var(--text2);text-align:center;margin-bottom:32px;line-height:1.5}
+.auth-form{width:100%}
+.auth-error{background:#FCEBEB;border:0.5px solid #F09595;border-radius:var(--radius-sm);padding:10px 13px;font-size:13px;color:#501313;margin-bottom:12px;display:none}
+.auth-note{font-size:12px;color:var(--text3);text-align:center;margin-top:14px;line-height:1.5}
+.auth-tabs{display:flex;background:var(--bg2);border-radius:var(--radius-sm);padding:3px;margin-bottom:20px}
+.auth-tab{flex:1;padding:8px;text-align:center;font-size:13px;font-weight:500;cursor:pointer;border-radius:6px;color:var(--text2);transition:all .15s}
+.auth-tab.active{background:var(--bg);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.1)}
+.separator{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--text3);font-size:12px}
+.separator::before,.separator::after{content:'';flex:1;height:0.5px;background:var(--border)}
+
+/* ===== DETAIL SCREEN ===== */
+#detail-map{height:180px;flex-shrink:0;z-index:1}
+.detail-body{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
+.route-line{display:flex;align-items:stretch;gap:12px;margin-bottom:14px}
+.route-dots{display:flex;flex-direction:column;align-items:center;padding-top:3px}
+.rdot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.rdash{width:1.5px;flex:1;background:var(--border);margin:3px 0}
+.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.meta-item{background:var(--bg2);border-radius:var(--radius-sm);padding:10px 12px}
+.meta-lbl{font-size:11px;color:var(--text3);font-weight:500}
+.meta-val{font-size:14px;font-weight:500;color:var(--text);margin-top:2px}
+.person-card{background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius);padding:13px;display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.big-av{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0}
+.pinfo-name{font-size:14px;font-weight:500;color:var(--text)}
+.pinfo-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.stars{color:#BA7517;font-size:12px;margin-top:2px}
+.lock-box{background:var(--bg2);border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:13px;display:flex;gap:10px;align-items:flex-start}
+.lock-icon{width:30px;height:30px;background:var(--orange-mid);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.lock-text{font-size:12px;color:var(--text2);line-height:1.5}
+.zero-badge{display:inline-flex;align-items:center;gap:5px;background:var(--orange-light);border-radius:20px;padding:5px 13px;font-size:12px;font-weight:500;color:var(--orange-dark);margin-bottom:12px}
+
+/* ===== PROFILE SCREEN ===== */
+.profile-hdr{padding:20px 16px 16px;display:flex;align-items:center;gap:14px;border-bottom:0.5px solid var(--border2)}
+.big-av-lg{width:60px;height:60px;border-radius:50%;background:var(--orange-mid);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;color:var(--orange-dark)}
+.pref-row{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:0.5px solid var(--border2);font-size:14px;color:var(--text)}
+.toggle-sw{width:38px;height:22px;background:var(--border);border-radius:11px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle-sw.on{background:var(--orange)}
+.toggle-sw::after{content:'';position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;top:2px;left:2px;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+.toggle-sw.on::after{transform:translateX(16px)}
+.stat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:14px 16px}
+.stat{background:var(--bg2);border-radius:var(--radius-sm);padding:12px;text-align:center}
+.stat-val{font-size:22px;font-weight:600;color:var(--text)}
+.stat-lbl{font-size:11px;color:var(--text2);margin-top:2px}
+
+/* ===== CHAT ===== */
+.chat-wrap{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
+.msg{max-width:75%;padding:10px 13px;border-radius:16px;font-size:14px;line-height:1.4}
+.msg.them{background:var(--bg2);color:var(--text);border-bottom-left-radius:4px;align-self:flex-start}
+.msg.me{background:var(--orange);color:#fff;border-bottom-right-radius:4px;align-self:flex-end}
+.msg-time{font-size:10px;opacity:.6;margin-top:4px}
+.chat-input-wrap{padding:10px 14px;padding-bottom:calc(10px + var(--safe-bot));border-top:0.5px solid var(--border2);display:flex;gap:8px;align-items:flex-end;background:var(--bg);flex-shrink:0}
+.chat-input{flex:1;min-height:38px;max-height:100px;padding:9px 13px;border:0.5px solid var(--border);border-radius:20px;font-size:14px;background:var(--bg2);color:var(--text);font-family:var(--font);resize:none;line-height:1.4}
+.chat-input:focus{outline:none;border-color:var(--orange)}
+.chat-send{width:38px;height:38px;background:var(--orange);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+/* ===== TOAST ===== */
+.toast{position:fixed;bottom:calc(80px + var(--safe-bot));left:50%;transform:translateX(-50%);background:#1a1918;color:#fff;padding:10px 20px;border-radius:24px;font-size:13px;font-weight:500;z-index:9999;opacity:0;pointer-events:none;white-space:nowrap;transition:opacity .25s;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+
+/* ===== INSTALL BANNER ===== */
+#install-banner{display:none;background:var(--orange);color:#fff;padding:12px 16px;font-size:13px;align-items:center;gap:10px;flex-shrink:0;cursor:pointer}
+#install-banner.show{display:flex}
+.install-text{flex:1;font-weight:500}
+.install-x{background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+/* ===== ACCEPTED ===== */
+.confirmed-banner{background:#E1F5EE;border:0.5px solid #5DCAA5;border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:13px;font-size:13px;color:#085041;font-weight:500}
+.phone-reveal{background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.phone-number{font-size:20px;font-weight:600;color:var(--text);margin:6px 0 10px;letter-spacing:1px}
+.btn-call{width:100%;padding:12px;background:var(--green);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font)}
+
+/* ===== MODAL ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.show{opacity:1;pointer-events:auto}
+.modal-sheet{background:var(--bg);border-radius:24px 24px 0 0;padding:20px 20px calc(20px + var(--safe-bot));width:100%;max-width:430px;transform:translateY(100%);transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.modal-overlay.show .modal-sheet{transform:translateY(0)}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px}
+.modal-title{font-size:17px;font-weight:600;color:var(--text);margin-bottom:8px}
+.modal-body{font-size:14px;color:var(--text2);line-height:1.5;margin-bottom:20px}
+.modal-btns{display:flex;gap:10px}
+.modal-btns button{flex:1;padding:13px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);border:none}
+
+/* ===== EMPTY ===== */
+.empty{text-align:center;padding:40px 20px;color:var(--text3)}
+.empty-icon{font-size:36px;margin-bottom:12px}
+.empty-text{font-size:14px}
+
+/* ===== ANIMATIONS ===== */
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.card{animation:fadeUp .2s ease both}
+.card:nth-child(2){animation-delay:.05s}
+.card:nth-child(3){animation-delay:.1s}
+.card:nth-child(4){animation-delay:.15s}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ======= AUTH ======= -->
+<div class="screen active" id="s-auth">
+  <div class="auth-wrap">
+    <div class="auth-logo">
+      <svg viewBox="0 0 38 38" fill="none">
+        <circle cx="19" cy="19" r="14" stroke="#fff" stroke-width="2.5"/>
+        <path d="M12 19.5l5 4 9-9" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="auth-title">Tax'icam</div>
+    <div class="auth-sub">Covoiturage sécurisé<br>pour les étudiants ICAM</div>
+
+    <div class="auth-form">
+      <div class="auth-tabs">
+        <div class="auth-tab active" id="tab-login" onclick="switchAuth('login')">Se connecter</div>
+        <div class="auth-tab" id="tab-signup" onclick="switchAuth('signup')">Créer un compte</div>
+      </div>
+
+      <div id="auth-error" class="auth-error"></div>
+
+      <!-- Signup extra fields -->
+      <div id="signup-fields" style="display:none">
+        <div style="margin-bottom:12px">
+          <label class="form-label">Prénom Nom</label>
+          <input class="input" id="f-name" type="text" placeholder="Sophie Dufour"/>
+        </div>
+        <div class="row2" style="margin-bottom:12px">
+          <div>
+            <label class="form-label">Téléphone</label>
+            <input class="input" id="f-phone" type="tel" placeholder="06 XX XX XX XX"/>
+          </div>
+          <div>
+            <label class="form-label">Année promo</label>
+            <select class="input" id="f-promo">
+              <option>2025</option><option>2026</option><option>2027</option>
+              <option selected>2028</option><option>2029</option><option>2030</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label class="form-label">Email ICAM</label>
+        <input class="input" id="f-email" type="email" placeholder="prenom.nom@2029.icam.fr"/>
+      </div>
+      <div style="margin-bottom:16px">
+        <label class="form-label">Mot de passe</label>
+        <input class="input" id="f-password" type="password" placeholder="••••••••"/>
+      </div>
+      <button class="btn-primary" onclick="handleAuth()">
+        <span id="auth-btn-text">Se connecter</span>
+      </button>
+      <div class="auth-note" id="auth-note">
+        Seules les adresses <strong>@icam.fr</strong> sont acceptées
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======= HOME ======= -->
+<div class="screen" id="s-home">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="6" stroke="#E8660A" stroke-width="2"/>
+        <path d="M5 8.5l2 1.5 4-4" stroke="#E8660A" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="topbar-title">Tax'icam</span>
+    <button class="topbar-action" onclick="showScreen('s-create')">+ Trajet</button>
+  </div>
+
+  <div id="install-banner" onclick="installPWA()">
+    <div class="install-text">📲 Installer Tax'icam sur votre téléphone</div>
+    <button class="install-x" onclick="event.stopPropagation();hideBanner()">✕</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="filterTab('all',this)">Tous</button>
+    <button class="tab" onclick="filterTab('sam',this)">SAM</button>
+    <button class="tab" onclick="filterTab('event',this)">Événements</button>
+    <button class="tab" onclick="filterTab('daily',this)">Quotidien</button>
+    <button class="tab" onclick="filterTab('request',this)">Demandes</button>
+  </div>
+
+  <div id="map"></div>
+  <div class="scroll" id="rides-list"></div>
+
+  <div class="nav">
+    <button class="nav-btn active" onclick="goHome()">
+      <svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v9h5v-5h4v5h5v-9"/></svg>Accueil
+    </button>
+    <button class="nav-btn" onclick="showScreen('s-create')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Proposer
+    </button>
+    <button class="nav-btn" onclick="showScreen('s-chat-list')">
+      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Messages
+    </button>
+    <button class="nav-btn" onclick="showScreen('s-profile')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Profil
+    </button>
+  </div>
+</div>
+
+<!-- ======= CREATE ======= -->
+<div class="screen" id="s-create">
+  <div class="topbar">
+    <button class="topbar-back" onclick="goHome()">←</button>
+    <span class="topbar-title">Nouveau trajet</span>
+  </div>
+  <div class="form-wrap">
+    <div class="form-section">
+      <div class="type-grid">
+        <button class="type-btn sel" id="t-sam" onclick="selType('sam')"><span class="type-icon">🛡️</span>SAM conducteur</button>
+        <button class="type-btn" id="t-event" onclick="selType('event')"><span class="type-icon">🎉</span>Événement promo</button>
+        <button class="type-btn" id="t-daily" onclick="selType('daily')"><span class="type-icon">📅</span>Quotidien</button>
+        <button class="type-btn" id="t-request" onclick="selType('request')"><span class="type-icon">🙋</span>Je cherche un SAM</button>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <label class="form-label">📍 Adresse de départ</label>
+      <input class="input" id="f-from" type="text" placeholder="Tapez une adresse…" oninput="doAC(this,'ac-from')" autocomplete="off"/>
+      <div class="ac-list" id="ac-from"></div>
+    </div>
+    <div class="form-section">
+      <label class="form-label">🏁 Adresse d'arrivée</label>
+      <input class="input" id="f-to" type="text" placeholder="Tapez une adresse…" oninput="doAC(this,'ac-to')" autocomplete="off"/>
+      <div class="ac-list" id="ac-to"></div>
+    </div>
+    <div style="height:140px;border-radius:var(--radius);overflow:hidden;margin-bottom:16px;border:0.5px solid var(--border)">
+      <div id="create-map" style="height:100%;width:100%"></div>
+    </div>
+    <div style="margin-bottom:16px">
+      <button class="btn-secondary" onclick="locateMe()" style="display:flex;align-items:center;justify-content:center;gap:8px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        Utiliser ma position actuelle
+      </button>
+    </div>
+
+    <div class="row2" style="margin-bottom:16px">
+      <div>
+        <label class="form-label">Date</label>
+        <input class="input" id="f-date" type="date"/>
+      </div>
+      <div>
+        <label class="form-label">Heure</label>
+        <input class="input" id="f-time" type="time" value="22:30"/>
+      </div>
+    </div>
+    <div class="row2" id="places-row" style="margin-bottom:16px">
+      <div>
+        <label class="form-label">Places dispo</label>
+        <input class="input" id="f-places" type="number" value="3" min="1" max="7"/>
+      </div>
+      <div>
+        <label class="form-label">Participation €</label>
+        <input class="input" id="f-price" type="number" value="0" min="0"/>
+      </div>
+    </div>
+    <div id="sam-row" style="margin-bottom:16px">
+      <label class="form-label">Engagement SAM</label>
+      <select class="input">
+        <option>✅ Je m'engage à 0 alcool toute la soirée</option>
+        <option>Trajet classique</option>
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label class="form-label">Note (optionnel)</label>
+      <textarea class="input area" rows="2" placeholder="Ex : Retour BDE, départ vers 2h…"></textarea>
+    </div>
+    <button class="btn-primary" onclick="submitRide()">Publier le trajet</button>
+  </div>
+</div>
+
+<!-- ======= DETAIL ======= -->
+<div class="screen" id="s-detail">
+  <div class="topbar">
+    <button class="topbar-back" onclick="goHome()">←</button>
+    <span class="topbar-title" id="detail-title">Trajet</span>
+  </div>
+  <div id="detail-map"></div>
+  <div class="detail-body" id="detail-body"></div>
+</div>
+
+<!-- ======= CONFIRM MODAL ======= -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Confirmer la demande ?</div>
+    <div class="modal-body">En rejoignant ce trajet, vous acceptez que vos coordonnées soient partagées avec le conducteur une fois le trajet accepté.</div>
+    <div class="modal-btns">
+      <button style="background:var(--bg2);color:var(--text)" onclick="closeModal()">Annuler</button>
+      <button style="background:var(--orange);color:#fff" onclick="confirmRide()">Confirmer ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======= ACCEPTED ======= -->
+<div class="screen" id="s-accepted">
+  <div class="topbar">
+    <button class="topbar-back" onclick="goHome()">←</button>
+    <span class="topbar-title">Trajet confirmé ✓</span>
+  </div>
+  <div class="scroll" id="accepted-body"></div>
+</div>
+
+<!-- ======= CHAT LIST ======= -->
+<div class="screen" id="s-chat-list">
+  <div class="topbar">
+    <span class="topbar-title">Messages</span>
+  </div>
+  <div class="scroll" id="chat-list-body"></div>
+  <div class="nav">
+    <button class="nav-btn" onclick="goHome()"><svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v9h5v-5h4v5h5v-9"/></svg>Accueil</button>
+    <button class="nav-btn" onclick="showScreen('s-create')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Proposer</button>
+    <button class="nav-btn active" onclick="showScreen('s-chat-list')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Messages</button>
+    <button class="nav-btn" onclick="showScreen('s-profile')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Profil</button>
+  </div>
+</div>
+
+<!-- ======= CHAT DETAIL ======= -->
+<div class="screen" id="s-chat">
+  <div class="topbar">
+    <button class="topbar-back" onclick="showScreen('s-chat-list')">←</button>
+    <span class="topbar-title" id="chat-title">Conversation</span>
+  </div>
+  <div class="chat-wrap" id="chat-messages"></div>
+  <div class="chat-input-wrap">
+    <textarea class="chat-input" id="chat-input" rows="1" placeholder="Message…" onkeydown="chatKeydown(event)"></textarea>
+    <button class="chat-send" onclick="sendMessage()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ======= PROFILE ======= -->
+<div class="screen" id="s-profile">
+  <div class="topbar">
+    <span class="topbar-title">Mon profil</span>
+    <button class="topbar-action" onclick="logout()">Déconnexion</button>
+  </div>
+  <div style="flex:1;overflow-y:auto">
+    <div class="profile-hdr">
+      <div class="big-av-lg" id="profile-av">LM</div>
+      <div>
+        <div style="font-size:17px;font-weight:600;color:var(--text)" id="profile-name">Lucas Martin</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:2px" id="profile-email">lucas.martin@2026.icam.fr</div>
+        <div style="margin-top:6px"><span class="badge sam">SAM certifié ICAM</span></div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-val">12</div><div class="stat-lbl">Trajets</div></div>
+      <div class="stat"><div class="stat-val">34</div><div class="stat-lbl">Passagers</div></div>
+      <div class="stat"><div class="stat-val">4.9★</div><div class="stat-lbl">Note</div></div>
+    </div>
+    <div style="padding:0 16px 8px;font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Préférences</div>
+    <div class="pref-row">Disponible ce soir<div class="toggle-sw on" onclick="this.classList.toggle('on')"></div></div>
+    <div class="pref-row">Notifications trajets<div class="toggle-sw on" onclick="this.classList.toggle('on')"></div></div>
+    <div class="pref-row">Mode SAM 0 alcool<div class="toggle-sw" onclick="this.classList.toggle('on')"></div></div>
+    <div class="pref-row">Accepter les demandes<div class="toggle-sw on" onclick="this.classList.toggle('on')"></div></div>
+  </div>
+  <div class="nav">
+    <button class="nav-btn" onclick="goHome()"><svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v9h5v-5h4v5h5v-9"/></svg>Accueil</button>
+    <button class="nav-btn" onclick="showScreen('s-create')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Proposer</button>
+    <button class="nav-btn" onclick="showScreen('s-chat-list')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Messages</button>
+    <button class="nav-btn active"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Profil</button>
+  </div>
+</div>
+
+</div><!-- end #app -->
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ===== DATA =====
+var currentUser = null;
+var currentFilter = 'all';
+var currentRide = null;
+var currentChatUser = null;
+var mainMap = null, detailMap = null, createMap = null;
+var mainMarkers = [];
+var createFromMarker = null, createToMarker = null;
+var deferredPrompt = null;
+
+var rides = [
+  {id:1,type:'sam',from:'ICAM Vannes',to:'Place de la République, Vannes',time:'23:00',date:'Ce soir',places:3,taken:1,driver:'Thomas B.',promo:'3A',phone:'06 12 34 56 78',note:'Retour soirée BDE vendredi — départ ICAM',price:0,zero:true,fromC:[47.6380,2.7750],toC:[47.6580,2.7600]},
+  {id:2,type:'event',from:'ICAM Vannes',to:'Salle des fêtes Arradon',time:'19:30',date:'Samedi',places:4,taken:2,driver:'Chloé M.',promo:'4A',phone:'06 98 76 54 32',note:'Gala de promo — trajet aller',price:2,zero:false,fromC:[47.6380,2.7750],toC:[47.6280,2.7200]},
+  {id:3,type:'daily',from:'Gare de Vannes',to:'ICAM Vannes',time:'07:45',date:'Lun–Ven',places:2,taken:0,driver:'Jules R.',promo:'2A',phone:'06 55 44 33 22',note:'Tous les matins, 1€/pers',price:1,zero:false,fromC:[47.6563,2.7618],toC:[47.6380,2.7750]},
+  {id:4,type:'sam',from:'Bar Le Roof',to:'Résidences Ker Lann',time:'01:30',date:'Nuit',places:3,taken:2,driver:'Marine L.',promo:'3A',phone:'06 77 88 99 00',note:'SAM soirée jeudi — 0 alcool garanti',price:0,zero:true,fromC:[47.6521,2.7588],toC:[47.6290,2.7820]},
+  {id:5,type:'request',from:'Bar Le Galion',to:'Résidence Les Érables',time:'02:00',date:'Ce soir',places:1,taken:0,driver:'Sarah D.',promo:'1A',phone:'06 11 22 33 44',note:'Cherche SAM — seule ce soir, merci !',price:0,zero:false,fromC:[47.6530,2.7610],toC:[47.6350,2.7880]},
+  {id:6,type:'event',from:'ICAM Vannes',to:'Karting Vannes',time:'14:00',date:'Dimanche',places:5,taken:1,driver:'Antoine D.',promo:'2A',phone:'06 44 55 66 77',note:'Événement sportif BDE',price:3,zero:false,fromC:[47.6380,2.7750],toC:[47.6700,2.8100]},
+];
+
+var colors = {sam:'#E8660A',event:'#7F77DD',daily:'#378ADD',request:'#D4537E'};
+var avColors = {sam:{bg:'#FEE8D6',color:'#7A3A00'},event:{bg:'#EEEDFE',color:'#3C3489'},daily:{bg:'#E6F1FB',color:'#0C447C'},request:{bg:'#FBEAF0',color:'#4B1528'}};
+
+var vannesPlaces = [
+  {label:'ICAM Vannes',addr:'2 Rue du Père de La Mennais, Vannes',coord:[47.6380,2.7750]},
+  {label:'Gare de Vannes',addr:'Place de la Gare, Vannes',coord:[47.6563,2.7618]},
+  {label:'Place de la République',addr:'Place de la République, Vannes',coord:[47.6582,2.7603]},
+  {label:'Bar Le Roof',addr:'Rue Alexandre le Pontois, Vannes',coord:[47.6521,2.7588]},
+  {label:'Bar Le Galion',addr:'Rue des Halles, Vannes',coord:[47.6530,2.7610]},
+  {label:'Résidences Ker Lann',addr:'Ker Lann, Vannes',coord:[47.6290,2.7820]},
+  {label:'Centre-ville Vannes',addr:'Place des Lices, Vannes',coord:[47.6580,2.7600]},
+  {label:'Université Bretagne Sud',addr:'Rue de la Loi, Vannes',coord:[47.6410,2.7680]},
+  {label:'Zénith de Vannes',addr:'Boulevard de la Paix, Vannes',coord:[47.6620,2.7510]},
+  {label:'Hôpital Chubert',addr:'Boulevard Général Maurice Guillaudot, Vannes',coord:[47.6490,2.7820]},
+  {label:'Plage de Conleau',addr:'Avenue du Maréchal de Lattre, Vannes',coord:[47.6230,2.7430]},
+  {label:'Centre commercial Atlantes',addr:'Rue de Luscanen, Vannes',coord:[47.6610,2.7890]},
+];
+
+var chatData = {
+  1: {name:'Thomas B.', msgs:[
+    {me:false,text:'Salut ! Toujours partant pour le retour vendredi ?',time:'22:04'},
+    {me:true,text:'Oui, je serai là à 23h devant l\'ICAM 👍',time:'22:06'},
+    {me:false,text:'Parfait, j\'ai encore 2 places. Tu peux amener quelqu\'un ?',time:'22:08'},
+  ]},
+  5: {name:'Sarah D.', msgs:[
+    {me:false,text:'Bonjour, vous avez vu ma demande SAM pour ce soir ?',time:'01:12'},
+    {me:true,text:'Oui je peux passer te chercher, tu es où exactement ?',time:'01:15'},
+    {me:false,text:'Au Galion, rue des Halles. Merci infiniment !!',time:'01:16'},
+  ]},
+};
+
+// ===== AUTH =====
+var authMode = 'login';
+function switchAuth(mode) {
+  authMode = mode;
+  document.getElementById('tab-login').classList.toggle('active', mode==='login');
+  document.getElementById('tab-signup').classList.toggle('active', mode==='signup');
+  document.getElementById('signup-fields').style.display = mode==='signup' ? 'block' : 'none';
+  document.getElementById('auth-btn-text').textContent = mode==='login' ? 'Se connecter' : 'Créer mon compte';
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+function handleAuth() {
+  var email = document.getElementById('f-email').value.trim();
+  var pw = document.getElementById('f-password').value;
+  var err = document.getElementById('auth-error');
+
+  // Validate ICAM email
+  if (!email.endsWith('@icam.fr') && !email.match(/@\d{4}\.icam\.fr$/)) {
+    err.textContent = 'Seules les adresses @icam.fr sont acceptées (ex: prenom.nom@2029.icam.fr)';
+    err.style.display = 'block'; return;
+  }
+  if (pw.length < 6) {
+    err.textContent = 'Le mot de passe doit faire au moins 6 caractères';
+    err.style.display = 'block'; return;
+  }
+
+  if (authMode === 'signup') {
+    var name = document.getElementById('f-name').value.trim();
+    var phone = document.getElementById('f-phone').value.trim();
+    if (!name || !phone) {
+      err.textContent = 'Veuillez remplir tous les champs'; err.style.display='block'; return;
+    }
+    var promo = document.getElementById('f-promo').value;
+    currentUser = {name, email, phone, promo};
+  } else {
+    // Simulated login - extract name from email
+    var parts = email.split('@')[0].split('.');
+    var name = parts.map(p=>p.charAt(0).toUpperCase()+p.slice(1)).join(' ');
+    // Extract promo from email if format prenom.nom@2029.icam.fr
+    var promoMatch = email.match(/@(\d{4})\./);
+    var promo = promoMatch ? promoMatch[1] : '2027';
+    currentUser = {name, email, phone:'06 XX XX XX XX', promo};
+  }
+
+  // Update profile UI
+  var initials = currentUser.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('profile-av').textContent = initials;
+  document.getElementById('profile-name').textContent = currentUser.name;
+  document.getElementById('profile-email').textContent = currentUser.email;
+
+  showScreen('s-home');
+  setTimeout(()=>{ renderRides(); checkInstallBanner(); }, 100);
+}
+
+// ===== SCREENS =====
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  setActiveNav(id);
+  if (id==='s-create') setTimeout(initCreateMap, 100);
+  if (id==='s-chat-list') renderChatList();
+}
+
+function setActiveNav(id) {
+  var map = {'s-home':0,'s-create':1,'s-chat-list':2,'s-chat-list':2,'s-profile':3};
+  // handled per screen
+}
+
+function goHome() {
+  showScreen('s-home');
+  setTimeout(renderRides, 50);
+}
+
+// ===== MAP =====
+function makeIcon(color, size=12) {
+  return L.divIcon({
+    html:`<div style="width:${size}px;height:${size}px;background:${color};border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.3)"></div>`,
+    className:'',iconSize:[size,size],iconAnchor:[size/2,size/2]
+  });
+}
+
+function initMainMap() {
+  if (mainMap) return;
+  mainMap = L.map('map',{zoomControl:false,attributionControl:false}).setView([47.643,2.762],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(mainMap);
+  L.control.zoom({position:'bottomright'}).addTo(mainMap);
+}
+
+function drawMainMarkers() {
+  mainMarkers.forEach(m=>m.remove()); mainMarkers=[];
+  var filtered = currentFilter==='all' ? rides : rides.filter(r=>r.type===currentFilter);
+  filtered.forEach(r=>{
+    var c = colors[r.type];
+    var m1 = L.marker(r.fromC,{icon:makeIcon(c,12)}).addTo(mainMap)
+      .bindTooltip(r.from.split(',')[0],{permanent:false,direction:'top'})
+      .on('click',()=>showDetail(r.id));
+    var m2 = L.marker(r.toC,{icon:makeIcon(c,10)}).addTo(mainMap)
+      .bindTooltip(r.to.split(',')[0],{permanent:false,direction:'top'})
+      .on('click',()=>showDetail(r.id));
+    mainMarkers.push(m1,m2);
+  });
+}
+
+function initDetailMap(ride) {
+  setTimeout(()=>{
+    if (detailMap) { detailMap.remove(); detailMap=null; }
+    detailMap = L.map('detail-map',{zoomControl:false,attributionControl:false}).setView(ride.fromC,14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(detailMap);
+    var c = colors[ride.type];
+    L.marker(ride.fromC,{icon:makeIcon(c,14)}).addTo(detailMap).bindPopup(`<b>Départ</b><br>${ride.from}`,{closeButton:false}).openPopup();
+    L.marker(ride.toC,{icon:makeIcon('#7F77DD',14)}).addTo(detailMap).bindPopup(`<b>Arrivée</b><br>${ride.to}`,{closeButton:false});
+    L.polyline([ride.fromC,ride.toC],{color:c,weight:3,opacity:0.55,dashArray:'7,7'}).addTo(detailMap);
+    detailMap.fitBounds(L.latLngBounds([ride.fromC,ride.toC]).pad(0.35));
+  },80);
+}
+
+function initCreateMap() {
+  if (createMap) return;
+  createMap = L.map('create-map',{zoomControl:false,attributionControl:false}).setView([47.643,2.762],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(createMap);
+  // Click to place marker
+  createMap.on('click', e=>{
+    if (!document.getElementById('f-from').value) {
+      document.getElementById('f-from').value = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+      if (createFromMarker) createFromMarker.remove();
+      createFromMarker = L.marker(e.latlng,{icon:makeIcon('#E8660A',14)}).addTo(createMap);
+    } else {
+      document.getElementById('f-to').value = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+      if (createToMarker) createToMarker.remove();
+      createToMarker = L.marker(e.latlng,{icon:makeIcon('#7F77DD',14)}).addTo(createMap);
+    }
+  });
+}
+
+function updateCreateMap(coord, isFrom) {
+  if (!createMap) return;
+  if (isFrom) {
+    if (createFromMarker) createFromMarker.remove();
+    createFromMarker = L.marker(coord,{icon:makeIcon('#E8660A',14)}).addTo(createMap).bindPopup('Départ').openPopup();
+  } else {
+    if (createToMarker) createToMarker.remove();
+    createToMarker = L.marker(coord,{icon:makeIcon('#7F77DD',14)}).addTo(createMap).bindPopup('Arrivée');
+  }
+  if (createFromMarker && createToMarker) {
+    var pts = [createFromMarker.getLatLng(), createToMarker.getLatLng()];
+    createMap.fitBounds(L.latLngBounds(pts).pad(0.3));
+  } else {
+    createMap.setView(coord,15);
+  }
+}
+
+// ===== GEOLOCATION =====
+function locateMe() {
+  if (!navigator.geolocation) { showToast('Géolocalisation non disponible'); return; }
+  showToast('Localisation en cours…');
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      var coord = [pos.coords.latitude, pos.coords.longitude];
+      document.getElementById('f-from').value = 'Ma position actuelle';
+      if (!createMap) initCreateMap();
+      setTimeout(()=>{ updateCreateMap(coord, true); },200);
+      showToast('Position détectée ✓');
+    },
+    ()=>showToast('Impossible d\'accéder à la localisation')
+  );
+}
+
+// ===== AUTOCOMPLETE =====
+function doAC(input, listId) {
+  var val = input.value.toLowerCase();
+  var list = document.getElementById(listId);
+  if (val.length < 2) { list.style.display='none'; return; }
+  var matches = vannesPlaces.filter(p=>p.label.toLowerCase().includes(val)||p.addr.toLowerCase().includes(val));
+  if (!matches.length) { list.style.display='none'; return; }
+  var isFrom = listId==='ac-from';
+  list.innerHTML = '';
+  matches.slice(0,5).forEach(p=>{
+    var div = document.createElement('div');
+    div.className = 'ac-item';
+    div.innerHTML = `<div class="ac-name">${p.label}</div><div class="ac-addr">${p.addr}</div>`;
+    div.onclick = ()=>{
+      input.value = p.label;
+      list.style.display = 'none';
+      updateCreateMap(p.coord, isFrom);
+    };
+    list.appendChild(div);
+  });
+  list.style.display = 'block';
+}
+document.addEventListener('click', e=>{
+  if (!e.target.closest('.ac-list') && !e.target.matches('#f-from,#f-to')) {
+    document.querySelectorAll('.ac-list').forEach(l=>l.style.display='none');
+  }
+});
+
+// ===== RIDES =====
+function renderRides() {
+  var list = document.getElementById('rides-list');
+  var filtered = currentFilter==='all' ? rides : rides.filter(r=>r.type===currentFilter);
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">Aucun trajet disponible</div></div>';
+    return;
+  }
+  list.innerHTML = filtered.map(r=>{
+    var left = r.places-r.taken;
+    var tl = {sam:'SAM',event:'Événement',daily:'Quotidien',request:'Demande SAM'}[r.type];
+    var av = avColors[r.type];
+    var initials = r.driver.replace('.','').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    return `<div class="card ${r.type}" onclick="showDetail(${r.id})">
+      <div class="card-top"><div class="card-route">${r.from.split(',')[0]} → ${r.to.split(',')[0]}</div><div class="card-time">${r.time}</div></div>
+      <div class="card-badges">
+        <span class="badge ${r.type}">${tl}</span>
+        ${r.zero?'<span class="badge zero">0 alcool</span>':''}
+        ${r.type!=='request'?`<span class="badge neutral">${left} place${left>1?'s':''} libre${left>1?'s':''}</span>`:''}
+        <span class="badge neutral">${r.price===0?'Gratuit':r.price+'€/pers'}</span>
+      </div>
+      <div class="av-row"><div class="avatar" style="background:${av.bg};color:${av.color}">${initials}</div><span class="av-name">${r.driver} — ${r.promo}</span></div>
+    </div>`;
+  }).join('');
+  setTimeout(()=>{ initMainMap(); drawMainMarkers(); },50);
+}
+
+function filterTab(type, el) {
+  currentFilter = type;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderRides();
+}
+
+// ===== DETAIL =====
+function showDetail(id) {
+  var r = rides.find(x=>x.id===id);
+  if (!r) return;
+  currentRide = r;
+  var isReq = r.type==='request';
+  var tl = {sam:'SAM 0 alcool',event:'Événement promo',daily:'Quotidien',request:'Demande SAM'}[r.type];
+  var av = avColors[r.type];
+  var initials = r.driver.replace('.','').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  var c = colors[r.type];
+
+  document.getElementById('detail-title').textContent = r.from.split(',')[0]+' → '+r.to.split(',')[0];
+  document.getElementById('detail-body').innerHTML = `
+    <div class="route-line">
+      <div class="route-dots"><div class="rdot" style="background:${c}"></div><div class="rdash"></div><div class="rdot" style="background:#7F77DD"></div></div>
+      <div style="flex:1">
+        <div style="margin-bottom:18px"><div style="font-size:14px;font-weight:500;color:var(--text)">${r.from}</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Départ — ${r.time}</div></div>
+        <div><div style="font-size:14px;font-weight:500;color:var(--text)">${r.to}</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Arrivée estimée</div></div>
+      </div>
+    </div>
+    <div class="meta-grid">
+      <div class="meta-item"><div class="meta-lbl">Type</div><div class="meta-val">${tl}</div></div>
+      <div class="meta-item"><div class="meta-lbl">Participation</div><div class="meta-val">${r.price===0?'Gratuit':r.price+' €'}</div></div>
+      ${isReq?'':`<div class="meta-item"><div class="meta-lbl">Places libres</div><div class="meta-val">${r.places-r.taken}/${r.places}</div></div>`}
+      <div class="meta-item"><div class="meta-lbl">Date</div><div class="meta-val">${r.date}</div></div>
+    </div>
+    <div class="person-card">
+      <div class="big-av" style="background:${av.bg};color:${av.color}">${initials}</div>
+      <div class="dinfo">
+        <div class="pinfo-name">${r.driver}${isReq?' (cherche un SAM)':''}</div>
+        <div class="pinfo-sub">${r.promo} · ICAM Vannes</div>
+        <div class="stars">★★★★★</div>
+      </div>
+    </div>
+    ${r.zero?`<div class="zero-badge"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5" stroke="#C4530A" stroke-width="1.5"/><path d="M5 8h6" stroke="#C4530A" stroke-width="1.5" stroke-linecap="round"/></svg>0 alcool toute la soirée</div>`:''}
+    <div class="lock-box">
+      <div class="lock-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="4" y="7" width="8" height="7" rx="1.5" stroke="#C4530A" stroke-width="1.5"/><path d="M6 7V5a2 2 0 014 0v2" stroke="#C4530A" stroke-width="1.5"/></svg></div>
+      <div class="lock-text">Le numéro de téléphone est révélé uniquement après acceptation du trajet pour votre sécurité.</div>
+    </div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px">${r.note}</p>
+    ${isReq
+      ?`<button class="btn-primary" onclick="openModal()">Proposer de ramener ${r.driver.split(' ')[0]}</button>`
+      :`<button class="btn-primary" onclick="openModal()">Rejoindre ce trajet</button>`
+    }
+    <div style="height:10px"></div>
+  `;
+  showScreen('s-detail');
+  initDetailMap(r);
+}
+
+// ===== MODAL & CONFIRM =====
+function openModal() {
+  document.getElementById('modal-confirm').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('modal-confirm').classList.remove('show');
+}
+function confirmRide() {
+  closeModal();
+  var r = currentRide;
+  var isReq = r.type==='request';
+  var av = avColors[r.type];
+  var initials = r.driver.replace('.','').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('accepted-body').innerHTML = `
+    <div style="padding:16px 14px">
+      <div class="confirmed-banner">✓ Trajet confirmé ! Vous pouvez maintenant contacter ${r.driver.split(' ')[0]}.</div>
+      <div class="phone-reveal">
+        <div class="person-card" style="border:none;padding:0;margin-bottom:0">
+          <div class="big-av" style="background:${av.bg};color:${av.color}">${initials}</div>
+          <div>
+            <div class="pinfo-name">${r.driver}</div>
+            <div class="pinfo-sub">${r.promo} · ICAM Vannes</div>
+            <div class="stars">★★★★★</div>
+          </div>
+        </div>
+        <div style="border-top:0.5px solid var(--border2);margin-top:12px;padding-top:12px">
+          <div style="font-size:12px;color:var(--text3);font-weight:500">NUMÉRO DE TÉLÉPHONE</div>
+          <div class="phone-number">${r.phone}</div>
+          <button class="btn-call" onclick="showToast('Appel en cours…')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2A19.79 19.79 0 013.09 4.18 2 2 0 015.09 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L9.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+            Appeler ${r.driver.split(' ')[0]}
+          </button>
+        </div>
+      </div>
+      <button class="btn-secondary" onclick="openChat(${r.id}, '${r.driver}')">💬 Envoyer un message</button>
+      <div style="height:10px"></div>
+      <button class="btn-secondary" onclick="goHome()">← Retour à l'accueil</button>
+    </div>
+  `;
+  showScreen('s-accepted');
+}
+
+// ===== CHAT =====
+function renderChatList() {
+  var body = document.getElementById('chat-list-body');
+  var convs = Object.entries(chatData);
+  if (!convs.length) {
+    body.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">Aucune conversation</div></div>';
+    return;
+  }
+  body.innerHTML = convs.map(([id,data])=>{
+    var last = data.msgs[data.msgs.length-1];
+    var r = rides.find(x=>x.id==id);
+    var av = r ? avColors[r.type] : {bg:'#FEE8D6',color:'#7A3A00'};
+    var initials = data.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    return `<div class="card" style="display:flex;align-items:center;gap:12px" onclick="openChat(${id},'${data.name}')">
+      <div class="avatar" style="width:42px;height:42px;font-size:14px;background:${av.bg};color:${av.color};flex-shrink:0">${initials}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:500;color:var(--text)">${data.name}</div>
+        <div style="font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${last.me?'Vous : ':''}${last.text}</div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);flex-shrink:0">${last.time}</div>
+    </div>`;
+  }).join('');
+}
+
+function openChat(id, name) {
+  currentChatUser = {id, name};
+  document.getElementById('chat-title').textContent = name;
+  renderMessages(id);
+  showScreen('s-chat');
+}
+
+function renderMessages(id) {
+  var wrap = document.getElementById('chat-messages');
+  var data = chatData[id];
+  if (!data) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = data.msgs.map(m=>`
+    <div style="display:flex;flex-direction:column;${m.me?'align-items:flex-end':'align-items:flex-start'}">
+      <div class="msg ${m.me?'me':'them'}">${m.text}<div class="msg-time">${m.time}</div></div>
+    </div>
+  `).join('');
+  setTimeout(()=>{ wrap.scrollTop = wrap.scrollHeight; },50);
+}
+
+function chatKeydown(e) {
+  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function sendMessage() {
+  var input = document.getElementById('chat-input');
+  var text = input.value.trim();
+  if (!text || !currentChatUser) return;
+  var id = currentChatUser.id;
+  if (!chatData[id]) chatData[id] = {name:currentChatUser.name, msgs:[]};
+  var now = new Date();
+  var time = now.getHours()+':'+(now.getMinutes()+'').padStart(2,'0');
+  chatData[id].msgs.push({me:true,text,time});
+  input.value = '';
+  renderMessages(id);
+  // Fake reply after 1s
+  setTimeout(()=>{
+    var replies = ['Ok super !','Je confirme 👍','À tout à l\'heure !','Merci beaucoup !','C\'est noté'];
+    chatData[id].msgs.push({me:false,text:replies[Math.floor(Math.random()*replies.length)],time});
+    renderMessages(id);
+  },1000);
+}
+
+// ===== FORMS =====
+function selType(t) {
+  ['sam','event','daily','request'].forEach(x=>document.getElementById('t-'+x).classList.remove('sel'));
+  document.getElementById('t-'+t).classList.add('sel');
+  document.getElementById('sam-row').style.display = t==='sam'?'block':'none';
+  document.getElementById('places-row').style.display = t==='request'?'none':'grid';
+}
+
+function submitRide() {
+  showToast('Trajet publié ! ✓');
+  setTimeout(goHome,1500);
+}
+
+// ===== PROFILE =====
+function logout() {
+  currentUser = null;
+  document.getElementById('f-email').value='';
+  document.getElementById('f-password').value='';
+  document.getElementById('auth-error').style.display='none';
+  showScreen('s-auth');
+}
+
+// ===== PWA INSTALL =====
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  checkInstallBanner();
+});
+
+function checkInstallBanner() {
+  if (deferredPrompt) {
+    document.getElementById('install-banner').classList.add('show');
+  }
+}
+
+function installPWA() {
+  if (!deferredPrompt) {
+    showToast('Ouvrez dans Safari / Chrome pour installer');
+    return;
+  }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(()=>{ deferredPrompt=null; hideBanner(); });
+}
+
+function hideBanner() {
+  document.getElementById('install-banner').classList.remove('show');
+}
+
+// ===== TOAST =====
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ===== SERVICE WORKER =====
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('/sw.js').then(()=>{
+      console.log('Tax\'icam SW registered');
+    });
+  });
+}
+</script>
+</body>
+</html>
