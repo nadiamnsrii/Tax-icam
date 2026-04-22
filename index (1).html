@@ -474,9 +474,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
       </div>
     </div>
     <div class="stat-row">
-      <div class="stat"><div class="stat-val">12</div><div class="stat-lbl">Trajets</div></div>
-      <div class="stat"><div class="stat-val">34</div><div class="stat-lbl">Passagers</div></div>
-      <div class="stat"><div class="stat-val">4.9★</div><div class="stat-lbl">Note</div></div>
+      <div class="stat"><div class="stat-val" id="stat-trips">—</div><div class="stat-lbl">Trajets</div></div>
+      <div class="stat"><div class="stat-val" id="stat-passengers">—</div><div class="stat-lbl">Passagers</div></div>
+      <div class="stat"><div class="stat-val" id="stat-rating">—</div><div class="stat-lbl">Note</div></div>
     </div>
     <div style="padding:0 16px 8px;font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Préférences</div>
     <div class="pref-row">Disponible ce soir<div class="toggle-sw on" onclick="this.classList.toggle('on')"></div></div>
@@ -500,8 +500,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ===== SUPABASE CONFIG =====
-const SUPABASE_URL = 'kqckwjmkmaftfzifezfp';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxY2t3am1rbWFmdGZ6aWZlemZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDQ5NDcsImV4cCI6MjA5MjQyMDk0N30.Yw6pndHh_-onNnZmIw86AY9gS2a9opjM65TFmJcCeL8';
+const SUPABASE_URL = 'VOTRE_PROJECT_URL';
+const SUPABASE_KEY = 'VOTRE_ANON_PUBLIC_KEY';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Vérifie si déjà connecté au chargement
@@ -523,33 +523,7 @@ var chatData = {};
 var colors = {sam:'#E8660A',event:'#7F77DD',daily:'#378ADD',request:'#D4537E'};
 var avColors = {sam:{bg:'#FEE8D6',color:'#7A3A00'},event:{bg:'#EEEDFE',color:'#3C3489'},daily:{bg:'#E6F1FB',color:'#0C447C'},request:{bg:'#FBEAF0',color:'#4B1528'}};
 
-var vannesPlaces = [
-  {label:'ICAM Vannes',addr:'2 Rue du Père de La Mennais, Vannes',coord:[47.6380,2.7750]},
-  {label:'Gare de Vannes',addr:'Place de la Gare, Vannes',coord:[47.6563,2.7618]},
-  {label:'Place de la République',addr:'Place de la République, Vannes',coord:[47.6582,2.7603]},
-  {label:'Bar Le Roof',addr:'Rue Alexandre le Pontois, Vannes',coord:[47.6521,2.7588]},
-  {label:'Bar Le Galion',addr:'Rue des Halles, Vannes',coord:[47.6530,2.7610]},
-  {label:'Résidences Ker Lann',addr:'Ker Lann, Vannes',coord:[47.6290,2.7820]},
-  {label:'Centre-ville Vannes',addr:'Place des Lices, Vannes',coord:[47.6580,2.7600]},
-  {label:'Université Bretagne Sud',addr:'Rue de la Loi, Vannes',coord:[47.6410,2.7680]},
-  {label:'Zénith de Vannes',addr:'Boulevard de la Paix, Vannes',coord:[47.6620,2.7510]},
-  {label:'Hôpital Chubert',addr:'Boulevard Général Maurice Guillaudot, Vannes',coord:[47.6490,2.7820]},
-  {label:'Plage de Conleau',addr:'Avenue du Maréchal de Lattre, Vannes',coord:[47.6230,2.7430]},
-  {label:'Centre commercial Atlantes',addr:'Rue de Luscanen, Vannes',coord:[47.6610,2.7890]},
-];
-
-var chatData = {
-  1: {name:'Thomas B.', msgs:[
-    {me:false,text:'Salut ! Toujours partant pour le retour vendredi ?',time:'22:04'},
-    {me:true,text:'Oui, je serai là à 23h devant l\'ICAM 👍',time:'22:06'},
-    {me:false,text:'Parfait, j\'ai encore 2 places. Tu peux amener quelqu\'un ?',time:'22:08'},
-  ]},
-  5: {name:'Sarah D.', msgs:[
-    {me:false,text:'Bonjour, vous avez vu ma demande SAM pour ce soir ?',time:'01:12'},
-    {me:true,text:'Oui je peux passer te chercher, tu es où exactement ?',time:'01:15'},
-    {me:false,text:'Au Galion, rue des Halles. Merci infiniment !!',time:'01:16'},
-  ]},
-};
+// Autocomplétion via Nominatim API — pas de données statiques
 
 // ===== AUTH =====
 var authMode = 'login';
@@ -598,10 +572,14 @@ async function handleAuth() {
       err.style.display='block';
       document.getElementById('auth-btn-text').textContent = 'Créer mon compte'; return;
     }
-    // Créer le profil dans la table profiles
-    await sb.from('profiles').insert({ id: data.user.id, name, phone, promo });
-    showToast('Compte créé ! Vérifiez votre email ICAM ✓');
+    // Créer le profil seulement s'il n'existe pas déjà
+    var {data: existing} = await sb.from('profiles').select('id').eq('id', data.user.id).single();
+    if (!existing) {
+      await sb.from('profiles').insert({ id: data.user.id, name, phone, promo });
+    }
+    showToast('Compte créé ! Connectez-vous maintenant ✓');
     document.getElementById('auth-btn-text').textContent = 'Créer mon compte';
+    switchAuth('login');
   } else {
     // Connexion Supabase
     var {data, error} = await sb.auth.signInWithPassword({ email, password: pw });
@@ -618,30 +596,44 @@ async function loadUserAndHome(user) {
   // Charger le profil depuis Supabase
   var {data: profile} = await sb.from('profiles').select('*').eq('id', user.id).single();
   if (profile) {
-    currentUser = profile;
+    currentUser = {...profile, email: user.email};
   } else {
-    // Profil pas encore créé (cas signup avec email non vérifié)
     var parts = user.email.split('@')[0].split('.');
     var name = parts.map(p=>p.charAt(0).toUpperCase()+p.slice(1)).join(' ');
     var promoMatch = user.email.match(/@(\d{4})\./);
-    currentUser = { name, email: user.email, phone: '', promo: promoMatch?promoMatch[1]:'', id: user.id };
+    currentUser = { name, email: user.email, phone:'', promo: promoMatch?promoMatch[1]:'', id: user.id };
   }
-  var initials = currentUser.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  document.getElementById('profile-av').textContent = initials;
-  document.getElementById('profile-name').textContent = currentUser.name;
-  document.getElementById('profile-email').textContent = currentUser.email || user.email;
+  updateProfileUI();
   showScreen('s-home');
-  setTimeout(()=>{ loadRides(); checkInstallBanner(); }, 100);
+  setTimeout(()=>{ loadRides(); loadProfileStats(); checkInstallBanner(); }, 100);
+}
+
+function updateProfileUI() {
+  if (!currentUser) return;
+  var initials = (currentUser.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('profile-av').textContent = initials;
+  document.getElementById('profile-name').textContent = currentUser.name || '';
+  document.getElementById('profile-email').textContent = currentUser.email || '';
+}
+
+async function loadProfileStats() {
+  if (!currentUser?.id) return;
+  // Nombre de trajets publiés
+  var {count: tripsCount} = await sb.from('rides').select('*', {count:'exact',head:true}).eq('driver_id', currentUser.id);
+  // Nombre total de passagers sur ces trajets
+  var {data: myRides} = await sb.from('rides').select('taken').eq('driver_id', currentUser.id);
+  var totalPassengers = (myRides||[]).reduce((s,r)=>s+r.taken,0);
+  var rating = currentUser.rating || 5.0;
+  var rEl = document.getElementById('stat-rating');
+  var tEl = document.getElementById('stat-trips');
+  var pEl = document.getElementById('stat-passengers');
+  if (tEl) tEl.textContent = tripsCount || 0;
+  if (pEl) pEl.textContent = totalPassengers || 0;
+  if (rEl) rEl.textContent = parseFloat(rating).toFixed(1)+'★';
 }
 
 // ===== SCREENS =====
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  setActiveNav(id);
-  if (id==='s-create') setTimeout(initCreateMap, 100);
-  if (id==='s-chat-list') renderChatList();
-}
+// showScreen now defined above
 
 function setActiveNav(id) {
   var map = {'s-home':0,'s-create':1,'s-chat-list':2,'s-chat-list':2,'s-profile':3};
@@ -651,6 +643,14 @@ function setActiveNav(id) {
 function goHome() {
   showScreen('s-home');
   setTimeout(loadRides, 50);
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id==='s-create') setTimeout(initCreateMap, 100);
+  if (id==='s-chat-list') renderChatList();
+  if (id==='s-profile') { updateProfileUI(); loadProfileStats(); }
 }
 
 // ===== MAP =====
