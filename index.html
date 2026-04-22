@@ -717,25 +717,34 @@ function locateMe() {
 
 // ===== AUTOCOMPLETE =====
 function doAC(input, listId) {
-  var val = input.value.toLowerCase();
+  var val = input.value.trim();
   var list = document.getElementById(listId);
-  if (val.length < 2) { list.style.display='none'; return; }
-  var matches = vannesPlaces.filter(p=>p.label.toLowerCase().includes(val)||p.addr.toLowerCase().includes(val));
-  if (!matches.length) { list.style.display='none'; return; }
-  var isFrom = listId==='ac-from';
-  list.innerHTML = '';
-  matches.slice(0,5).forEach(p=>{
-    var div = document.createElement('div');
-    div.className = 'ac-item';
-    div.innerHTML = `<div class="ac-name">${p.label}</div><div class="ac-addr">${p.addr}</div>`;
-    div.onclick = ()=>{
-      input.value = p.label;
-      list.style.display = 'none';
-      updateCreateMap(p.coord, isFrom);
-    };
-    list.appendChild(div);
-  });
-  list.style.display = 'block';
+  if (val.length < 3) { list.style.display='none'; return; }
+  clearTimeout(input._t);
+  input._t = setTimeout(()=>{
+    fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val+' Vannes')}&format=json&limit=5&countrycodes=fr&addressdetails=1`)
+      .then(r=>r.json())
+      .then(results=>{
+        if (!results.length) { list.style.display='none'; return; }
+        var isFrom = listId==='ac-from';
+        list.innerHTML = '';
+        results.forEach(p=>{
+          var div = document.createElement('div');
+          div.className = 'ac-item';
+          var name = p.display_name.split(',').slice(0,2).join(',');
+          var addr = p.display_name.split(',').slice(2,4).join(',');
+          div.innerHTML = `<div class="ac-name">${name}</div><div class="ac-addr">${addr}</div>`;
+          div.onclick = ()=>{
+            input.value = name;
+            list.style.display = 'none';
+            updateCreateMap([parseFloat(p.lat), parseFloat(p.lon)], isFrom);
+          };
+          list.appendChild(div);
+        });
+        list.style.display = 'block';
+      })
+      .catch(()=>{ list.style.display='none'; });
+  }, 400);
 }
 document.addEventListener('click', e=>{
   if (!e.target.closest('.ac-list') && !e.target.matches('#f-from,#f-to')) {
