@@ -663,7 +663,7 @@ function makeIcon(color, size=12) {
 
 function initMainMap() {
   if (mainMap) return;
-  mainMap = L.map('map',{zoomControl:false,attributionControl:false}).setView([47.643,2.762],13);
+  mainMap = L.map('map',{zoomControl:false,attributionControl:false}).setView([47.653, -2.760],13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(mainMap);
   L.control.zoom({position:'bottomright'}).addTo(mainMap);
 }
@@ -698,7 +698,7 @@ function initDetailMap(ride) {
 
 function initCreateMap() {
   if (createMap) return;
-  createMap = L.map('create-map',{zoomControl:false,attributionControl:false}).setView([47.643,2.762],13);
+  createMap = L.map('create-map',{zoomControl:false,attributionControl:false}).setView([47.653, -2.760],13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(createMap);
   // Click to place marker
   createMap.on('click', e=>{
