@@ -940,18 +940,18 @@ async function renderChatList() {
   body.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">Chargement…</div></div>';
   if (!currentUser?.id) return;
 
-  // Récupérer tous les messages où je suis impliqué
+  // Récupérer tous les messages avec les deux profils (expéditeur ET destinataire)
   var {data, error} = await sb.from('messages')
-    .select('*, from:profiles!messages_from_id_fkey(name), ride:rides(id,type,from_addr)')
+    .select('*, from_profile:profiles!messages_from_id_fkey(id,name), to_profile:profiles!messages_to_id_fkey(id,name), ride:rides(id,type,from_addr,to_addr)')
     .or('from_id.eq.'+currentUser.id+',to_id.eq.'+currentUser.id)
     .order('created_at', {ascending:false});
 
   if (error || !data?.length) {
-    body.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">Aucune conversation</div></div>';
+    body.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">Aucune conversation pour l\'instant</div></div>';
     return;
   }
 
-  // Grouper par ride_id pour n'afficher qu'une ligne par conversation
+  // Grouper par ride_id — garder le message le plus récent par conversation
   var seen = {};
   var convs = [];
   data.forEach(m => {
@@ -963,13 +963,17 @@ async function renderChatList() {
 
   body.innerHTML = convs.map(m => {
     var isMe = m.from_id === currentUser.id;
-    var otherName = isMe ? '(destinataire)' : (m.from?.name || 'Inconnu');
+    // L'interlocuteur = l'autre personne (pas moi)
+    var otherProfile = isMe ? m.to_profile : m.from_profile;
+    var otherName = otherProfile?.name || 'Étudiant ICAM';
     var r = rides.find(x=>x.id==m.ride_id);
     var av = r ? avColors[r.type] : {bg:'#FEE8D6',color:'#7A3A00'};
     var initials = otherName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     var preview = (isMe ? 'Vous : ' : '') + m.content;
     var time = new Date(m.created_at).toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit'});
-    var rideLabel = m.ride?.from_addr?.split(',')[0] || 'Trajet';
+    // Nom du trajet court : juste la première partie avant la virgule
+    var fromAddr = m.ride?.from_addr || '';
+    var rideLabel = fromAddr.split(',')[0].trim() || 'Trajet';
     return `<div class="card" style="display:flex;align-items:center;gap:12px" onclick="openChat(${m.ride_id},'${otherName.replace(/'/g,"\'")}')">
       <div class="avatar" style="width:42px;height:42px;font-size:14px;background:${av.bg};color:${av.color};flex-shrink:0">${initials}</div>
       <div style="flex:1;min-width:0">
