@@ -935,46 +935,135 @@ function confirmRide() {
 }
 
 // ===== CHAT =====
-function renderChatList() {
+async function renderChatList() {
   var body = document.getElementById('chat-list-body');
-  var convs = Object.entries(chatData);
-  if (!convs.length) {
+  body.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">Chargement…</div></div>';
+  if (!currentUser?.id) return;
+
+  // Récupérer tous les messages où je suis impliqué
+  var {data, error} = await sb.from('messages')
+    .select('*, from:profiles!messages_from_id_fkey(name), ride:rides(id,type,from_addr)')
+    .or('from_id.eq.'+currentUser.id+',to_id.eq.'+currentUser.id)
+    .order('created_at', {ascending:false});
+
+  if (error || !data?.length) {
     body.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">Aucune conversation</div></div>';
     return;
   }
-  body.innerHTML = convs.map(([id,data])=>{
-    var last = data.msgs[data.msgs.length-1];
-    var r = rides.find(x=>x.id==id);
+
+  // Grouper par ride_id pour n'afficher qu'une ligne par conversation
+  var seen = {};
+  var convs = [];
+  data.forEach(m => {
+    if (!seen[m.ride_id]) {
+      seen[m.ride_id] = true;
+      convs.push(m);
+    }
+  });
+
+  body.innerHTML = convs.map(m => {
+    var isMe = m.from_id === currentUser.id;
+    var otherName = isMe ? '(destinataire)' : (m.from?.name || 'Inconnu');
+    var r = rides.find(x=>x.id==m.ride_id);
     var av = r ? avColors[r.type] : {bg:'#FEE8D6',color:'#7A3A00'};
-    var initials = data.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    return `<div class="card" style="display:flex;align-items:center;gap:12px" onclick="openChat(${id},'${data.name}')">
+    var initials = otherName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    var preview = (isMe ? 'Vous : ' : '') + m.content;
+    var time = new Date(m.created_at).toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit'});
+    var rideLabel = m.ride?.from_addr?.split(',')[0] || 'Trajet';
+    return `<div class="card" style="display:flex;align-items:center;gap:12px" onclick="openChat(${m.ride_id},'${otherName.replace(/'/g,"\'")}')">
       <div class="avatar" style="width:42px;height:42px;font-size:14px;background:${av.bg};color:${av.color};flex-shrink:0">${initials}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:14px;font-weight:500;color:var(--text)">${data.name}</div>
-        <div style="font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${last.me?'Vous : ':''}${last.text}</div>
+        <div style="font-size:14px;font-weight:500;color:var(--text)">${otherName} <span style="font-size:11px;color:var(--text3);font-weight:400">· ${rideLabel}</span></div>
+        <div style="font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${preview}</div>
       </div>
-      <div style="font-size:11px;color:var(--text3);flex-shrink:0">${last.time}</div>
+      <div style="font-size:11px;color:var(--text3);flex-shrink:0">${time}</div>
     </div>`;
   }).join('');
 }
 
-function openChat(id, name) {
-  currentChatUser = {id, name};
+async function openChat(rideId, name) {
+  // Retrouver le vrai userId de l'interlocuteur (conducteur ou passager)
+  var r = rides.find(x=>x.id==rideId);
+  var otherUserId = null;
+  if (r) {
+    // Si je suis le conducteur, l'interlocuteur est le passager qui a réservé
+    // Si je suis le passager, l'interlocuteur est le conducteur
+    if (r.driver_id === currentUser?.id) {
+      // Je suis le conducteur → chercher le passager dans bookings
+      var {data: bk} = await sb.from('bookings').select('passenger_id, profiles(name)').eq('ride_id', rideId).limit(1).single();
+      otherUserId = bk?.passenger_id;
+      name = bk?.profiles?.name || name;
+    } else {
+      otherUserId = r.driver_id;
+    }
+  }
+  currentChatUser = {id: rideId, name, userId: otherUserId};
   document.getElementById('chat-title').textContent = name;
-  renderMessages(id);
+  await loadMessages(rideId);
   showScreen('s-chat');
+  subscribeToMessages(rideId);
+}
+
+async function loadMessages(rideId) {
+  // Charger tous les messages du trajet depuis Supabase
+  var {data, error} = await sb.from('messages')
+    .select('*')
+    .eq('ride_id', rideId)
+    .order('created_at', {ascending: true});
+  if (error) { showToast('Erreur chargement messages'); return; }
+  chatData[rideId] = {
+    name: currentChatUser?.name || '',
+    msgs: (data||[]).map(m => ({
+      me: m.from_id === currentUser?.id,
+      text: m.content,
+      time: new Date(m.created_at).toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit'}),
+    }))
+  };
+  renderMessages(rideId);
 }
 
 function renderMessages(id) {
   var wrap = document.getElementById('chat-messages');
   var data = chatData[id];
-  if (!data) { wrap.innerHTML = ''; return; }
+  if (!data || !data.msgs.length) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-icon">💬</div><div class="empty-text">Commencez la conversation !</div></div>';
+    return;
+  }
   wrap.innerHTML = data.msgs.map(m=>`
     <div style="display:flex;flex-direction:column;${m.me?'align-items:flex-end':'align-items:flex-start'}">
       <div class="msg ${m.me?'me':'them'}">${m.text}<div class="msg-time">${m.time}</div></div>
     </div>
   `).join('');
   setTimeout(()=>{ wrap.scrollTop = wrap.scrollHeight; },50);
+}
+
+var realtimeChannel = null;
+
+function subscribeToMessages(rideId) {
+  // Se désabonner du canal précédent si on change de conv
+  if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
+  realtimeChannel = sb.channel('messages-ride-' + rideId)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages',
+      filter: 'ride_id=eq.' + rideId,
+    }, payload => {
+      var m = payload.new;
+      var id = m.ride_id;
+      if (!chatData[id]) chatData[id] = {name: currentChatUser?.name||'', msgs:[]};
+      // Éviter les doublons (mes propres messages déjà affichés)
+      var alreadyThere = chatData[id].msgs.some(x=>x.text===m.content && x.me && m.from_id===currentUser?.id);
+      if (!alreadyThere) {
+        chatData[id].msgs.push({
+          me: m.from_id === currentUser?.id,
+          text: m.content,
+          time: new Date(m.created_at).toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit'}),
+        });
+        renderMessages(id);
+      }
+    })
+    .subscribe();
 }
 
 function chatKeydown(e) {
@@ -985,21 +1074,21 @@ async function sendMessage() {
   var input = document.getElementById('chat-input');
   var text = input.value.trim();
   if (!text || !currentChatUser || !currentUser) return;
-  var toId = currentChatUser.userId;
   var rideId = currentChatUser.id;
-  // Enregistrer dans Supabase
+  var toId = currentChatUser.userId || currentUser.id;
   var {error} = await sb.from('messages').insert({
     from_id: currentUser.id,
-    to_id: toId || currentUser.id,
+    to_id: toId,
     ride_id: rideId,
     content: text,
   });
-  if (error) { showToast('Erreur envoi message'); return; }
-  var id = currentChatUser.id;
+  if (error) { showToast('Erreur : ' + error.message); return; }
+  // Affichage immédiat côté envoyeur (le realtime le recevra aussi mais on déduplique)
+  var id = rideId;
   if (!chatData[id]) chatData[id] = {name:currentChatUser.name, msgs:[]};
   var now = new Date();
   var time = now.getHours()+':'+(now.getMinutes()+'').padStart(2,'0');
-  chatData[id].msgs.push({me:true,text,time});
+  chatData[id].msgs.push({me:true, text, time});
   input.value = '';
   renderMessages(id);
 }
