@@ -1205,26 +1205,39 @@ async function loadManageRides() {
   const list = document.getElementById('my-managed-rides');
   if (!currentUser) return;
 
-  // On demande à Supabase tes trajets + les réservations liées
-  const { data: myRides, error } = await sb.from('rides')
-    .select(`id, from_addr, to_addr, places, taken, bookings (id, status, profiles (name, promo))`)
+  // 1. On récupère d'abord tes trajets
+  const { data: myRides, error: ridesError } = await sb.from('rides')
+    .select('id, from_addr, to_addr, places, taken')
     .eq('driver_id', currentUser.id);
 
-  if (error || !myRides || myRides.length === 0) {
+  if (ridesError || !myRides || myRides.length === 0) {
     list.innerHTML = '<div style="font-size:13px; color:var(--text3); text-align:center; padding:10px">Aucun trajet proposé</div>';
     return;
   }
 
+  // 2. On récupère TOUTES les réservations pour ces trajets
+  const rideIds = myRides.map(r => r.id);
+  const { data: allBookings, error: bookingsError } = await sb.from('bookings')
+    .select('id, status, ride_id, profiles (name, promo)')
+    .in('ride_id', rideIds);
+
+  if (bookingsError) {
+    console.error("Erreur bookings:", bookingsError);
+  }
+
+  // 3. On affiche le tout
   list.innerHTML = myRides.map(ride => {
-    const pending = ride.bookings.filter(b => b.status === 'pending');
+    // On filtre les bookings qui appartiennent à CE trajet précis
+    const bookingsForThisRide = (allBookings || []).filter(b => b.ride_id === ride.id && b.status === 'pending');
+    
     return `
       <div class="card" style="border-left: 3px solid var(--orange); margin-bottom:10px; padding:10px;">
         <div style="font-size:13px; font-weight:600">${ride.from_addr.split(',')[0]} → ${ride.to_addr.split(',')[0]}</div>
         <div style="font-size:11px; color:var(--text2)">${ride.taken}/${ride.places} places occupées</div>
         
-        ${pending.length > 0 ? pending.map(b => `
+        ${bookingsForThisRide.length > 0 ? bookingsForThisRide.map(b => `
           <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; background:var(--bg2); padding:8px; border-radius:8px">
-            <span style="font-size:12px">${b.profiles.name}</span>
+            <span style="font-size:12px">${b.profiles?.name || 'Étudiant'}</span>
             <div style="display:flex; gap:5px">
               <button onclick="updateBookingStatus(${b.id}, 'accepted', ${ride.id}, ${ride.taken})" style="background:var(--green); color:white; border:none; padding:5px 10px; border-radius:4px; font-size:10px; cursor:pointer">Accepter</button>
               <button onclick="updateBookingStatus(${b.id}, 'rejected', ${ride.id})" style="background:var(--pink); color:white; border:none; padding:5px 10px; border-radius:4px; font-size:10px; cursor:pointer">Refuser</button>
