@@ -483,6 +483,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
     <div class="pref-row">Notifications trajets<div class="toggle-sw on" onclick="this.classList.toggle('on')"></div></div>
     <div class="pref-row">Mode SAM 0 alcool<div class="toggle-sw" onclick="this.classList.toggle('on')"></div></div>
     <div class="pref-row">Accepter les demandes<div class="toggle-sw on" onclick="this.classList.toggle('on')"></div></div>
+    <div style="padding:16px 16px 8px;font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Mes trajets proposés</div>
+    <div id="my-managed-rides" style="padding:0 14px; margin-bottom:20px"></div>
   </div>
   <div class="nav">
     <button class="nav-btn" onclick="goHome()"><svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v9h5v-5h4v5h5v-9"/></svg>Accueil</button>
@@ -650,7 +652,11 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
   if (id==='s-create') setTimeout(initCreateMap, 100);
   if (id==='s-chat-list') renderChatList();
-  if (id==='s-profile') { updateProfileUI(); loadProfileStats(); }
+  if (id==='s-profile') { 
+    updateProfileUI(); 
+    loadProfileStats(); 
+    loadManageRides(); // <--- C'est l'ajout de cette ligne qui est crucial
+  }
 }
 
 // ===== MAP =====
@@ -899,39 +905,52 @@ function openModal() {
 function closeModal() {
   document.getElementById('modal-confirm').classList.remove('show');
 }
-function confirmRide() {
-  closeModal();
-  var r = currentRide;
-  var isReq = r.type==='request';
-  var av = avColors[r.type];
-  var initials = r.driver.replace('.','').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  document.getElementById('accepted-body').innerHTML = `
-    <div style="padding:16px 14px">
-      <div class="confirmed-banner">✓ Trajet confirmé ! Vous pouvez maintenant contacter ${r.driver.split(' ')[0]}.</div>
-      <div class="phone-reveal">
-        <div class="person-card" style="border:none;padding:0;margin-bottom:0">
-          <div class="big-av" style="background:${av.bg};color:${av.color}">${initials}</div>
-          <div>
-            <div class="pinfo-name">${r.driver}</div>
-            <div class="pinfo-sub">${r.promo} · ICAM Vannes</div>
-            <div class="stars">★★★★★</div>
+async function confirmRide() {
+  if (!currentUser) return;
+  const rideId = currentRide.id;
+
+  // 1. Vérifier si l'étudiant a déjà réservé
+  const { data: existing } = await sb.from('bookings')
+    .select('id')
+    .eq('ride_id', rideId)
+    .eq('passenger_id', currentUser.id)
+    .single();
+
+  if (existing) {
+    showToast('Vous avez déjà demandé ce trajet !');
+    closeModal();
+    return;
+  }
+
+  // 2. Créer la réservation
+  const { error } = await sb.from('bookings').insert({
+    ride_id: rideId,
+    passenger_id: currentUser.id,
+    status: 'pending'
+  });
+
+  if (error) {
+    showToast('Erreur lors de la réservation');
+  } else {
+    showToast('Demande envoyée au conducteur ! ✓');
+    closeModal();
+    // On garde l'affichage du numéro de téléphone pour le moment comme tu l'avais prévu
+    var r = currentRide;
+    var av = avColors[r.type];
+    var initials = r.driver.replace('.','').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('accepted-body').innerHTML = `
+      <div style="padding:16px 14px">
+        <div class="confirmed-banner">✓ Demande envoyée ! Attendez la validation du conducteur.</div>
+        <div class="phone-reveal">
+          <div class="person-card" style="border:none;padding:0">
+            <div class="big-av" style="background:${av.bg};color:${av.color}">${initials}</div>
+            <div><div class="pinfo-name">${r.driver}</div><div class="pinfo-sub">${r.promo} · ICAM</div></div>
           </div>
         </div>
-        <div style="border-top:0.5px solid var(--border2);margin-top:12px;padding-top:12px">
-          <div style="font-size:12px;color:var(--text3);font-weight:500">NUMÉRO DE TÉLÉPHONE</div>
-          <div class="phone-number">${r.phone}</div>
-          <button class="btn-call" onclick="showToast('Appel en cours…')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2A19.79 19.79 0 013.09 4.18 2 2 0 015.09 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L9.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-            Appeler ${r.driver.split(' ')[0]}
-          </button>
-        </div>
-      </div>
-      <button class="btn-secondary" onclick="openChat(${r.id}, '${r.driver}')">💬 Envoyer un message</button>
-      <div style="height:10px"></div>
-      <button class="btn-secondary" onclick="goHome()">← Retour à l'accueil</button>
-    </div>
-  `;
-  showScreen('s-accepted');
+        <button class="btn-secondary" onclick="goHome()">Retour à l'accueil</button>
+      </div>`;
+    showScreen('s-accepted');
+  }
 }
 
 // ===== CHAT =====
@@ -1181,6 +1200,57 @@ if ('serviceWorker' in navigator) {
     });
   });
 }  */
+  // FONCTION 1 : Charge les trajets que TU proposes et les demandes des autres
+async function loadManageRides() {
+  const list = document.getElementById('my-managed-rides');
+  if (!currentUser) return;
+
+  // On demande à Supabase tes trajets + les réservations liées
+  const { data: myRides, error } = await sb.from('rides')
+    .select(`id, from_addr, to_addr, places, taken, bookings (id, status, profiles (name, promo))`)
+    .eq('driver_id', currentUser.id);
+
+  if (error || !myRides || myRides.length === 0) {
+    list.innerHTML = '<div style="font-size:13px; color:var(--text3); text-align:center; padding:10px">Aucun trajet proposé</div>';
+    return;
+  }
+
+  list.innerHTML = myRides.map(ride => {
+    const pending = ride.bookings.filter(b => b.status === 'pending');
+    return `
+      <div class="card" style="border-left: 3px solid var(--orange); margin-bottom:10px; padding:10px;">
+        <div style="font-size:13px; font-weight:600">${ride.from_addr.split(',')[0]} → ${ride.to_addr.split(',')[0]}</div>
+        <div style="font-size:11px; color:var(--text2)">${ride.taken}/${ride.places} places occupées</div>
+        
+        ${pending.length > 0 ? pending.map(b => `
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; background:var(--bg2); padding:8px; border-radius:8px">
+            <span style="font-size:12px">${b.profiles.name}</span>
+            <div style="display:flex; gap:5px">
+              <button onclick="updateBookingStatus(${b.id}, 'accepted', ${ride.id}, ${ride.taken})" style="background:var(--green); color:white; border:none; padding:5px 10px; border-radius:4px; font-size:10px; cursor:pointer">Accepter</button>
+              <button onclick="updateBookingStatus(${b.id}, 'rejected', ${ride.id})" style="background:var(--pink); color:white; border:none; padding:5px 10px; border-radius:4px; font-size:10px; cursor:pointer">Refuser</button>
+            </div>
+          </div>
+        `).join('') : '<div style="font-size:10px; color:var(--text3); margin-top:5px">Aucune demande en attente</div>'}
+      </div>`;
+  }).join('');
+}
+
+// FONCTION 2 : S'exécute quand tu cliques sur "Accepter" ou "Refuser"
+async function updateBookingStatus(bookingId, newStatus, rideId, currentTaken) {
+  // 1. On change le statut dans la table 'bookings'
+  const { error } = await sb.from('bookings').update({ status: newStatus }).eq('id', bookingId);
+  
+  // 2. Si c'est accepté, on ajoute +1 au compteur de places prises ('taken')
+  if (!error && newStatus === 'accepted') {
+    await sb.from('rides').update({ taken: (currentTaken || 0) + 1 }).eq('id', rideId);
+    showToast('Passager accepté ! ✓');
+  } else if (!error) {
+    showToast('Demande refusée');
+  }
+
+  loadManageRides(); // On rafraîchit l'affichage du profil
+  loadRides();       // On rafraîchit la liste d'accueil
+}
 </script>
 </body>
 </html>
