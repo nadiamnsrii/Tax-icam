@@ -608,6 +608,20 @@ async function loadUserAndHome(user) {
   updateProfileUI();
   showScreen('s-home');
   setTimeout(()=>{ loadRides(); loadProfileStats(); checkInstallBanner(); }, 100);
+  // 📩 Écouter les nouvelles demandes en temps réel
+  sb.channel('new-bookings')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bookings' }, async (payload) => {
+      const newBooking = payload.new;
+      const { data: ride } = await sb.from('rides').select('driver_id').eq('id', newBooking.ride_id).single();
+      
+      if (ride && ride.driver_id === currentUser.id) {
+        showToast("📩 Nouvelle demande de trajet reçue !");
+        if (document.getElementById('s-profile').classList.contains('active')) {
+          loadManageRides(); // Rafraîchit la liste si on est sur le profil
+        }
+      }
+    })
+    .subscribe();
 }
 
 function updateProfileUI() {
@@ -908,6 +922,13 @@ function closeModal() {
 async function confirmRide() {
   if (!currentUser) return;
   const rideId = currentRide.id;
+
+  // 🛑 AJOUT : Empêcher de réserver son propre trajet
+  if (currentRide.driver_id === currentUser.id) {
+    showToast("Vous ne pouvez pas rejoindre votre propre trajet !");
+    closeModal();
+    return;
+  }
 
   // 1. Vérifier si l'étudiant a déjà réservé
   const { data: existing } = await sb.from('bookings')
@@ -1239,8 +1260,8 @@ async function loadManageRides() {
           <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; background:var(--bg2); padding:8px; border-radius:8px">
             <span style="font-size:12px">${b.profiles?.name || 'Étudiant'}</span>
             <div style="display:flex; gap:5px">
-              <button onclick="updateBookingStatus(${b.id}, 'accepted', ${ride.id}, ${ride.taken})" style="background:var(--green); color:white; border:none; padding:5px 10px; border-radius:4px; font-size:10px; cursor:pointer">Accepter</button>
-              <button onclick="updateBookingStatus(${b.id}, 'rejected', ${ride.id})" style="background:var(--pink); color:white; border:none; padding:5px 10px; border-radius:4px; font-size:10px; cursor:pointer">Refuser</button>
+              <button onclick="updateBookingStatus('${b.id}', 'accepted', '${ride.id}', ${ride.taken}, '${(b.profiles?.name || 'Étudiant').replace(/'/g,"\\'")}', '${b.passenger_id}')" style="background:var(--green); color:white; border:none; padding:5px 10px; border-radius:4px; font-size:10px; cursor:pointer">Accepter</button>
+              <button onclick="updateBookingStatus('${b.id}', 'rejected', '${ride.id}')" style="background:var(--pink); color:white; border:none; padding:5px 10px; border-radius:4px; font-size:10px; cursor:pointer">Refuser</button>
             </div>
           </div>
         `).join('') : '<div style="font-size:10px; color:var(--text3); margin-top:5px">Aucune demande en attente</div>'}
@@ -1249,20 +1270,23 @@ async function loadManageRides() {
 }
 
 // FONCTION 2 : S'exécute quand tu cliques sur "Accepter" ou "Refuser"
-async function updateBookingStatus(bookingId, newStatus, rideId, currentTaken) {
-  // 1. On change le statut dans la table 'bookings'
+async function updateBookingStatus(bookingId, newStatus, rideId, currentTaken, passengerName, passengerId) {
   const { error } = await sb.from('bookings').update({ status: newStatus }).eq('id', bookingId);
   
-  // 2. Si c'est accepté, on ajoute +1 au compteur de places prises ('taken')
   if (!error && newStatus === 'accepted') {
     await sb.from('rides').update({ taken: (currentTaken || 0) + 1 }).eq('id', rideId);
     showToast('Passager accepté ! ✓');
+    
+    // 🔥 OUVERTURE AUTOMATIQUE DU CHAT
+    setTimeout(() => {
+      openChat(rideId, passengerName, passengerId);
+    }, 500); 
   } else if (!error) {
     showToast('Demande refusée');
   }
 
-  loadManageRides(); // On rafraîchit l'affichage du profil
-  loadRides();       // On rafraîchit la liste d'accueil
+  loadManageRides();
+  loadRides();
 }
 </script>
 </body>
