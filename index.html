@@ -902,9 +902,13 @@ function showDetail(id) {
       <div class="lock-text">Le numéro de téléphone est révélé uniquement après acceptation du trajet pour votre sécurité.</div>
     </div>
     <p style="font-size:13px;color:var(--text2);margin-bottom:16px">${r.note}</p>
-    ${isReq
-      ?`<button class="btn-primary" onclick="openModal()">Proposer de ramener ${r.driver.split(' ')[0]}</button>`
-      :`<button class="btn-primary" onclick="openModal()">Rejoindre ce trajet</button>`
+    
+    ${r.driver_id === currentUser.id 
+      ? `<div style="text-align:center; padding:12px; background:var(--orange-light); color:var(--orange-dark); border-radius:var(--radius-sm); font-weight:600;">C'est votre trajet</div>`
+      : (isReq
+          ? `<button class="btn-primary" onclick="openModal()">Proposer de ramener ${r.driver.split(' ')[0]}</button>`
+          : `<button class="btn-primary" onclick="openModal()">Rejoindre ce trajet</button>`
+        )
     }
     <div style="height:10px"></div>
   `;
@@ -1236,10 +1240,10 @@ async function loadManageRides() {
     return;
   }
 
-  // 2. On récupère TOUTES les réservations pour ces trajets
+  // 2. On récupère TOUTES les réservations avec le passenger_id
   const rideIds = myRides.map(r => r.id);
   const { data: allBookings, error: bookingsError } = await sb.from('bookings')
-    .select('id, status, ride_id, profiles (name, promo)')
+    .select('id, status, ride_id, passenger_id, profiles (name, promo)') // <-- AJOUT ICI
     .in('ride_id', rideIds);
 
   if (bookingsError) {
